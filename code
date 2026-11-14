@@ -1,0 +1,176 @@
+# minesweeper
+
+import pygame
+import random
+pygame.init()
+board_size = (20, 20)
+cell_size = 50
+WIDTH, HEIGHT = board_size[0] * cell_size, board_size[1] * cell_size
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+clock = pygame.time.Clock()
+screen_color = (0, 0, 0)
+board = []
+fps = 60
+running = True
+font = pygame.font.SysFont("Arial", int(cell_size * 0.5))
+mine_png = pygame.transform.scale(pygame.image.load("minesweeper mine.png"), (cell_size * 0.8, cell_size * 0.8))
+mine_number = 50
+
+
+def init_board(mines, sizex, sizey, clickpos):
+
+    """
+    NOTE: origin of the board (0,0) is defined as the top-left corner of the board.
+    as the X value increases, the selected column is moved right.
+    as the Y value increases, the selected row is moved down.
+    the "board" 2d matrix is indexed first the y coordinate, then the x coordinate, where y is columns and x is rows.
+    """
+
+    playing_board = []
+    mines_pos = []
+
+    for i in range(mines):
+        mines_pos.append("*")
+
+    safe_pos = []
+
+    for i in range((sizex * sizey) - mines):
+        safe_pos.append("0")
+
+    board1 = mines_pos + safe_pos
+    random.shuffle(board1)
+
+    for y in range(sizey):
+        playing_board.append(board1[(y * sizex):(sizex * (y + 1))])
+
+    if playing_board[clickpos[1]][clickpos[0]] != "0":
+        return False
+
+    directions = [(-1, 1), (0, 1), (1, 1),
+                  (-1, 0),          (1, 0),
+                  (-1, -1), (0, -1), (1, -1)
+                  ]
+    rows = len(playing_board)
+    cols = len(playing_board[0])
+    for y in range(sizey):
+        for x in range(sizex):
+            if playing_board[y][x] != "*":
+                nearby_mines = 0
+                for dirx, diry in directions:
+                    nx, ny = x + dirx, y + diry
+                    if 0 <= nx < cols and 0 <= ny < rows:
+                        neighbor = playing_board[ny][nx]
+                        if neighbor == "*":
+                            nearby_mines += 1
+
+                playing_board[y][x] = str(nearby_mines)
+    return playing_board
+
+
+def reveal_zeros(playing_board, x, y):
+    rows = len(playing_board)
+    cols = len(playing_board[0])
+    directions = [(-1, 1), (0, 1), (1, 1),
+                  (-1, 0),          (1, 0),
+                  (-1, -1), (0, -1), (1, -1)
+                  ]
+    queue = [(x, y)]
+    revealed = set()
+    while queue:
+        cx, cy = queue.pop(0)
+
+        if (cx, cy) in revealed:
+            continue
+
+        revealed.add((cx, cy))
+
+        if playing_board[cy][cx] != "0":
+            continue
+
+        for dirx, diry in directions:
+            nx, ny = cx + dirx, cy + diry
+            if 0 <= nx < cols and 0 <= ny < rows:
+                if (nx, ny) not in revealed:
+                    queue.append((nx, ny))
+
+    return revealed
+
+
+def win_detect(playing_board, tiles_revealed):
+    for y in range(len(playing_board)):
+        for x in range(len(playing_board[0])):
+            if playing_board[y][x] != "*" and (x, y) not in tiles_revealed:
+                return False
+
+    return True
+
+
+revealed_tiles = []
+board_generated = False
+lose = False
+win = False
+counter = 0
+offset = 0  # for screen shake effect
+
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        mouse_x, mouse_y = pygame.mouse.get_pos()
+        xpos = mouse_x // cell_size
+        ypos = mouse_y // cell_size
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and (xpos, ypos) not in revealed_tiles:
+            if not board_generated:
+                while True:
+                    board = init_board(mine_number, board_size[0], board_size[1], (xpos, ypos))
+                    if board:
+                        break
+                board_generated = True
+            if board[ypos][xpos] not in revealed_tiles:
+                if board[ypos][xpos] == "0":
+                    revealed_tiles += reveal_zeros(board, xpos, ypos)
+                    
+                else:
+                    revealed_tiles.append((xpos, ypos))
+            if board[ypos][xpos] == "*":
+                lose = True
+                revealed_tiles.append(board)
+
+    for y in range(board_size[1]):
+        for x in range(board_size[0]):
+            rect = pygame.Rect(x * cell_size + offset, y * cell_size + offset, cell_size, cell_size)
+            if (x, y) in revealed_tiles:
+                value = board[y][x]
+                if value == "*":
+                    pygame.draw.rect(screen, (255, 0, 0), rect)
+                elif value == "0":
+                    pygame.draw.rect(screen, (172, 147, 98), rect)
+                else:
+                    pygame.draw.rect(screen, (220, 220, 220), rect)
+                if value != "0" and value != "*":
+                    text = font.render(value, True, (0, 0, 0))
+                    screen.blit(text, text.get_rect(center=rect.center))
+                elif value == "*":
+                    screen.blit(mine_png, mine_png.get_rect(center=rect.center))
+            else:
+                if (x % 2 == 0 and y % 2 != 0) or (x % 2 != 0 and y % 2 == 0):
+                    pygame.draw.rect(screen, (120, 120, 120), rect)
+                else:
+                    pygame.draw.rect(screen, (110, 110, 110), rect)
+
+    if board_generated and win_detect(board, revealed_tiles):
+        win = True
+
+    if lose or win:
+        counter += 1
+    if counter >= fps * 5:
+        break
+
+    pygame.display.flip()
+    clock.tick(fps)
+
+pygame.quit()
+if lose:
+    print("You Lost!")
+elif win:
+    print("You won!")
